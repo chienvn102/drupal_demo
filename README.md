@@ -137,58 +137,6 @@ curl -X PATCH http://localhost:4000/api/reports/uuid-here \
   }'
 ```
 
-## Deploy lên DigitalOcean
-
-1. SSH vào droplet:
-```bash
-ssh root@167.172.69.210
-```
-
-2. Clone repository:
-```bash
-cd /var/www
-git clone https://github.com/chienvn102/node_demo.git demo_backend
-cd demo_backend
-```
-
-3. Cài đặt dependencies:
-```bash
-npm install
-```
-
-4. Cấu hình .env:
-```bash
-cp .env.example .env
-nano .env
-```
-
-5. Import database:
-```bash
-mysql -u root -p < database/schema.sql
-```
-
-6. Cấu hình PM2:
-```bash
-pm2 start src/index.js --name "demo-backend"
-pm2 save
-```
-
-7. Cấu hình Nginx (thêm vào file config):
-```nginx
-server {
-    listen 80;
-    server_name api.yourdomain.com;
-
-    location / {
-        proxy_pass http://localhost:4000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
-    }
-}
-```
 
 8. Reload Nginx:
 ```bash
