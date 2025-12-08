@@ -7,6 +7,9 @@ const { testConnection } = require('./config/database');
 const categoryRoutes = require('./routes/categoryRoutes');
 const documentRoutes = require('./routes/documentRoutes');
 const reportRoutes = require('./routes/reportRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
+const taskRoutes = require('./routes/taskRoutes');
+const meetingRoutes = require('./routes/meetingRoutes');
 
 const app = express();
 
@@ -38,6 +41,9 @@ app.get('/health', (req, res) => {
 app.use('/api/categories', categoryRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/tasks', taskRoutes);
+app.use('/api/meetings', meetingRoutes);
 
 // 404 handler
 app.use((req, res) => {
