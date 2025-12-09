@@ -104,27 +104,40 @@ class NotificationWatcher {
         metadataStr = JSON.stringify(notification.metadata);
       }
 
-      await admin.messaging().send({
+      // Logic phân loại:
+      // - Meeting/Task: Gửi SYNC (để Frontend tự schedule Alarm)
+      // - System/Khác: Gửi Notification hiển thị ngay
+
+      const isSyncType = notification.type_code === 'meeting' || notification.type_code === 'task_deadline';
+
+      // Base payload (Data Only)
+      const messagePayload = {
         token: fcmToken,
-        notification: {
-          title: notification.title,
-          body: notification.message,
-        },
         data: {
-          id: notification.id ? notification.id.toString() : '',
-          type: notification.type_code || 'system',
-          action_url: notification.action_url || '',
-          metadata: metadataStr // Send raw stringified JSON
+          type: isSyncType ? 'SYNC' : (notification.type_code || 'system'),
+          entity_type: notification.type_code || 'system',
+          entity_id: notification.id ? notification.id.toString() : '',
+          metadata: metadataStr
         },
         android: {
-          priority: notification.priority === 'urgent' || notification.priority === 'high' ? 'high' : 'normal',
-          notification: {
-            channelId: notification.type_code === 'meeting' ? 'meetings' :
-              notification.type_code === 'task_deadline' ? 'tasks' : 'default',
-          }
+          priority: 'high',
         }
-      });
-      console.log(`🚀 Pushed FCM notification to user ${userId}`);
+      };
+
+      // Nếu KHÔNG PHẢI Sync Type -> Kèm thêm notification payload để hiện luôn
+      if (!isSyncType) {
+        messagePayload.notification = {
+          title: notification.title,
+          body: notification.message,
+        };
+        // Thêm channel mặc định
+        messagePayload.android.notification = {
+          channelId: 'default'
+        };
+      }
+
+      await admin.messaging().send(messagePayload);
+      console.log(`🚀 Sent ${isSyncType ? 'SYNC' : 'ALERT'} to user ${userId}`);
 
     } catch (error) {
       console.error(`❌ Error pushing FCM to user ${notification.user_id}:`, error.message);
