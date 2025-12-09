@@ -119,22 +119,43 @@ router.post('/', async (req, res) => {
       metadata
     });
 
-    // 🔥 PUSH REAL-TIME QUA WEBSOCKET
-    const io = req.app.get('io');
-    if (io) {
-      const userRoom = `user_${user_id}`;
-      io.to(userRoom).emit('notification', {
-        id: notification.id,
-        type_id,
-        title,
-        message,
-        priority: priority || 'medium',
-        scheduled_time,
-        action_url,
-        metadata,
-        created_at: new Date().toISOString()
-      });
-      console.log(`🚀 Pushed notification to user ${user_id} via WebSocket`);
+    // 🔥 INSTANT FCM PUSH (Thông báo ngay khi tạo mới)
+    try {
+      const admin = require('firebase-admin');
+      const { pool } = require('../config/database');
+
+      // Lấy FCM token của user
+      const [users] = await pool.query('SELECT fcm_token FROM users WHERE id = ?', [user_id]);
+      const fcmToken = users[0]?.fcm_token;
+
+      if (fcmToken && fcmToken.length > 50) { // Token thật > 50 ký tự
+        const instantMessage = {
+          token: fcmToken,
+          notification: {
+            title: `📢 ${title}`,
+            body: message,
+          },
+          data: {
+            type: 'INSTANT',
+            notification_id: notification.id.toString(),
+            scheduled_time: scheduled_time,
+            metadata: metadata ? JSON.stringify(metadata) : '{}'
+          },
+          android: {
+            priority: 'high',
+            notification: {
+              channelId: 'alarm_channel',
+              sound: 'alarm_sound'
+            }
+          }
+        };
+
+        await admin.messaging().send(instantMessage);
+        console.log(`🚀 Sent INSTANT FCM to user ${user_id} (scheduled: ${scheduled_time})`);
+      }
+    } catch (fcmError) {
+      console.error('FCM Instant Push Error:', fcmError.message);
+      // Không throw error, vẫn trả về success vì notification đã được tạo
     }
 
     res.status(201).json({
