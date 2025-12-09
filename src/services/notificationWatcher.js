@@ -86,6 +86,58 @@ class NotificationWatcher {
   /**
    * Push notification qua FCM
    */
+  /**
+   * Push notification qua FCM
+   */
+  async pushNotification(notification) {
+    try {
+      const userId = notification.user_id.toString();
+      const fcmToken = notification.fcm_token;
+
+      if (!fcmToken) {
+        console.log(`ℹ️ User ${userId} has no FCM token, skipping push`);
+        return;
+      }
+
+      // Metadata handling
+      let metadataStr = '{}';
+      if (typeof notification.metadata === 'string') {
+        metadataStr = notification.metadata;
+      } else if (notification.metadata) {
+        metadataStr = JSON.stringify(notification.metadata);
+      }
+
+      // Logic: Gửi cả SYNC (để App xử lý logic) và Notification (để hiển thị ngay)
+      const isSyncType = notification.type_code === 'meeting' || notification.type_code === 'task_deadline';
+
+      const messagePayload = {
+        token: fcmToken,
+        notification: {
+          title: notification.title,
+          body: notification.message,
+        },
+        data: {
+          type: isSyncType ? 'SYNC' : (notification.type_code || 'system'),
+          entity_type: notification.type_code || 'system',
+          entity_id: notification.id ? notification.id.toString() : '',
+          metadata: metadataStr
+        },
+        android: {
+          priority: 'high',
+          notification: {
+            channelId: 'default'
+          }
+        }
+      };
+
+      await admin.messaging().send(messagePayload);
+      console.log(`🚀 Sent Notification + ${isSyncType ? 'SYNC' : 'DATA'} to user ${userId}`);
+
+    } catch (error) {
+      console.error(`❌ Error pushing FCM to user ${notification.user_id}:`, error.message);
+    }
+  }
+
   async checkUpcomingMeetings() {
     try {
       const now = new Date();
