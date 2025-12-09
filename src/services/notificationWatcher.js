@@ -164,7 +164,7 @@ class NotificationWatcher {
       const userId = notification.user_id.toString();
       const room = `user_${userId}`;
 
-      // Emit notification đến user room
+      // 1. Emit qua WebSocket (Real-time in-app)
       this.io.to(room).emit('notification', {
         id: notification.id,
         type: notification.type_code || 'system',
@@ -178,7 +178,39 @@ class NotificationWatcher {
         created_at: notification.created_at,
       });
 
-      console.log(`✅ Pushed notification ${notification.id} to user ${userId}`);
+      console.log(`✅ Pushed WebSocket notification ${notification.id} to user ${userId}`);
+
+      // 2. Push qua FCM (Background)
+      const fcmToken = notification.fcm_token;
+      if (fcmToken) {
+        try {
+          const admin = require('../config/firebase');
+          await admin.messaging().send({
+            token: fcmToken,
+            notification: {
+              title: notification.title,
+              body: notification.message,
+            },
+            data: {
+              id: notification.id.toString(),
+              type: notification.type_code || 'system',
+              action_url: notification.action_url || '',
+              // FCM data values must be strings
+              metadata: typeof notification.metadata === 'string' ? notification.metadata : JSON.stringify(notification.metadata || {})
+            },
+            android: {
+              priority: notification.priority === 'urgent' || notification.priority === 'high' ? 'high' : 'normal',
+              notification: {
+                channelId: notification.type_code === 'meeting' ? 'meetings' :
+                  notification.type_code === 'task_deadline' ? 'tasks' : 'default',
+              }
+            }
+          });
+          console.log(`🚀 Pushed FCM notification to user ${userId}`);
+        } catch (fcmError) {
+          console.error(`⚠️ Error pushing FCM to user ${userId}:`, fcmError.message);
+        }
+      }
 
     } catch (error) {
       console.error('❌ Error pushing notification:', error);
