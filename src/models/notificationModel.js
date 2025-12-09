@@ -109,6 +109,13 @@ const createNotification = async (data) => {
     metadata
   } = data;
 
+  // Convert ISO datetime to MySQL format (YYYY-MM-DD HH:MM:SS)
+  let mysqlDateTime = scheduled_time;
+  if (scheduled_time && (scheduled_time.includes('T') || scheduled_time.includes('Z'))) {
+    const date = new Date(scheduled_time);
+    mysqlDateTime = date.toISOString().slice(0, 19).replace('T', ' ');
+  }
+
   const query = `
     INSERT INTO notifications 
     (user_id, type_id, title, message, scheduled_time, priority, action_url, metadata)
@@ -122,7 +129,7 @@ const createNotification = async (data) => {
     type_id,
     title,
     message,
-    scheduled_time,
+    mysqlDateTime,  // Use converted datetime
     priority,
     action_url,
     metadataJson
