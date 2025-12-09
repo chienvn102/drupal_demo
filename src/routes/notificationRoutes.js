@@ -263,41 +263,41 @@ router.get('/pending/all', async (req, res) => {
       error: error.message
     });
   }
-  // POST /api/notifications/fcm-token - Update FCM Token
-  router.post('/fcm-token', async (req, res) => {
-    try {
-      const { user_id, fcm_token } = req.body;
+});
 
-      if (!user_id || !fcm_token) {
-        return res.status(400).json({
-          success: false,
-          message: 'Missing required fields: user_id, fcm_token'
-        });
-      }
+// POST /api/notifications/fcm-token - Update FCM Token
+router.post('/fcm-token', async (req, res) => {
+  try {
+    const { user_id, fcm_token } = req.body;
 
-      const success = await notificationModel.updateFcmToken(user_id, fcm_token);
-
-      if (!success) {
-        return res.status(404).json({
-          success: false,
-          message: 'User not found'
-        });
-      }
-
-      res.json({
-        success: true,
-        message: 'FCM Token updated successfully'
-      });
-    } catch (error) {
-      console.error('Error updating FCM Token:', error);
-      res.status(500).json({
+    if (!user_id || !fcm_token) {
+      return res.status(400).json({
         success: false,
-        message: 'Failed to update FCM Token',
-        error: error.message
+        message: 'Missing required fields: user_id, fcm_token'
       });
     }
-  });
 
+    const success = await notificationModel.updateFcmToken(user_id, fcm_token);
+
+    if (!success) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'FCM Token updated successfully'
+    });
+  } catch (error) {
+    console.error('Error updating FCM Token:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update FCM Token',
+      error: error.message
+    });
+  }
 });
 
 module.exports = router;
