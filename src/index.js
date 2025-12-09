@@ -19,8 +19,12 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: '*', // Trong production nên giới hạn origin cụ thể
-    methods: ['GET', 'POST']
-  }
+    methods: ['GET', 'POST'],
+    credentials: true
+  },
+  // Enable cả polling và websocket cho React Native
+  transports: ['polling', 'websocket'],
+  allowEIO3: true
 });
 
 // Middleware
