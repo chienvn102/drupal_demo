@@ -1,13 +1,13 @@
 /**
  * Notification Watcher Service
- * Theo dõi database và push notification real-time qua WebSocket
+ * Theo dõi database và push notification qua Firebase Cloud Messaging (FCM)
  */
 
 const { pool } = require('../config/database');
+const admin = require('../config/firebase'); // Require firebase admin
 
 class NotificationWatcher {
-  constructor(io) {
-    this.io = io;
+  constructor() {
     this.interval = null;
     this.lastCheckTime = new Date();
     this.checkInterval = 3000; // Check mỗi 3 giây
@@ -17,7 +17,7 @@ class NotificationWatcher {
    * Bắt đầu watching database
    */
   start() {
-    console.log('🔄 Starting notification watcher...');
+    console.log('🔄 Starting notification watcher (FCM Only)...');
 
     // Check ngay lập tức
     this.checkNotifications();
@@ -49,7 +49,6 @@ class NotificationWatcher {
       const now = new Date();
 
       // Lấy notifications chưa gửi (scheduled_time <= now và is_sent = 0)
-      // Không phụ thuộc vào created_at, vì notification có thể được tạo trước
       const [notifications] = await pool.query(`
         SELECT 
           n.*,
@@ -67,19 +66,16 @@ class NotificationWatcher {
       if (notifications.length > 0) {
         console.log(`📬 Found ${notifications.length} new notifications`);
 
-        // Push notification cho từng user
         for (const notif of notifications) {
-          // Đánh dấu đã gửi (set is_sent = 1 nếu chưa có ai set) - tránh duplicate
+          // Mark as sent first to prevent duplicates
           const [updateResult] = await pool.query(`UPDATE notifications SET is_sent = 1, sent_at = NOW() WHERE id = ? AND is_sent = 0`, [notif.id]);
           if (!updateResult || updateResult.affectedRows === 0) {
-            console.log(`⚠️ Notification ${notif.id} already sent by another worker, skipping push`);
-            continue; // Skip push if another worker already handled it
+            continue;
           }
           await this.pushNotification(notif);
         }
       }
 
-      // Update lastCheckTime
       this.lastCheckTime = now;
 
     } catch (error) {
@@ -88,14 +84,63 @@ class NotificationWatcher {
   }
 
   /**
-   * Kiểm tra meetings sắp diễn ra
+   * Push notification qua FCM
    */
+  async pushNotification(notification) {
+    try {
+      const userId = notification.user_id.toString();
+      const fcmToken = notification.fcm_token;
+
+      if (!fcmToken) {
+        console.log(`ℹ️ User ${userId} has no FCM token, skipping push`);
+        return;
+      }
+
+      // Metadata handling
+      let metadataStr = '{}';
+      if (typeof notification.metadata === 'string') {
+        metadataStr = notification.metadata;
+      } else if (notification.metadata) {
+        metadataStr = JSON.stringify(notification.metadata);
+      }
+
+      await admin.messaging().send({
+        token: fcmToken,
+        notification: {
+          title: notification.title,
+          body: notification.message,
+        },
+        data: {
+          id: notification.id ? notification.id.toString() : '',
+          type: notification.type_code || 'system',
+          action_url: notification.action_url || '',
+          metadata: metadataStr // Send raw stringified JSON
+        },
+        android: {
+          priority: notification.priority === 'urgent' || notification.priority === 'high' ? 'high' : 'normal',
+          notification: {
+            channelId: notification.type_code === 'meeting' ? 'meetings' :
+              notification.type_code === 'task_deadline' ? 'tasks' : 'default',
+          }
+        }
+      });
+      console.log(`🚀 Pushed FCM notification to user ${userId}`);
+
+    } catch (error) {
+      console.error(`❌ Error pushing FCM to user ${notification.user_id}:`, error.message);
+    }
+  }
+
+  // ... (Giữ nguyên logic checkUpcomingMeetings và checkOverdueTasks vì nó chỉ INSERT vào DB)
+  // Nhưng cần đảm bảo chúng gọi `this.pushNotification` thay vì emit socket
+
   async checkUpcomingMeetings() {
+    // ... Same legacy logic for identifying meetings ...
+    // Simplified for brevity - assumes logic is same just calls this.pushNotification
     try {
       const now = new Date();
       const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
 
-      // Lấy meetings sắp diễn ra trong 1 giờ tới
       const [meetings] = await pool.query(`
         SELECT 
           m.*,
@@ -117,7 +162,6 @@ class NotificationWatcher {
         console.log(`📅 Found ${meetings.length} upcoming meetings`);
 
         for (const meeting of meetings) {
-          // Tạo notification cho meeting
           const [result] = await pool.query(`
             INSERT INTO notifications (
               user_id, type_id, title, message, 
@@ -135,10 +179,10 @@ class NotificationWatcher {
             })
           ]);
 
-          // Push ngay
           await this.pushNotification({
             id: result.insertId,
             user_id: meeting.user_id,
+            fcm_token: meeting.fcm_token, // Important: Pass token from query
             type_code: 'meeting',
             title: '🕐 Cuộc họp sắp diễn ra',
             message: `"${meeting.title}" sẽ bắt đầu trong vòng 1 giờ tới`,
@@ -150,76 +194,11 @@ class NotificationWatcher {
           });
         }
       }
-
     } catch (error) {
       console.error('❌ Error checking upcoming meetings:', error);
     }
   }
 
-  /**
-   * Push notification qua WebSocket
-   */
-  async pushNotification(notification) {
-    try {
-      const userId = notification.user_id.toString();
-      const room = `user_${userId}`;
-
-      // 1. Emit qua WebSocket (Real-time in-app)
-      this.io.to(room).emit('notification', {
-        id: notification.id,
-        type: notification.type_code || 'system',
-        type_id: notification.type_id || null,
-        title: notification.title,
-        message: notification.message,
-        priority: notification.priority,
-        action_url: notification.action_url || null,
-        metadata: typeof notification.metadata === 'string' ? notification.metadata : JSON.stringify(notification.metadata || {}),
-        scheduled_time: notification.scheduled_time,
-        created_at: notification.created_at,
-      });
-
-      console.log(`✅ Pushed WebSocket notification ${notification.id} to user ${userId}`);
-
-      // 2. Push qua FCM (Background)
-      const fcmToken = notification.fcm_token;
-      if (fcmToken) {
-        try {
-          const admin = require('../config/firebase');
-          await admin.messaging().send({
-            token: fcmToken,
-            notification: {
-              title: notification.title,
-              body: notification.message,
-            },
-            data: {
-              id: notification.id.toString(),
-              type: notification.type_code || 'system',
-              action_url: notification.action_url || '',
-              // FCM data values must be strings
-              metadata: typeof notification.metadata === 'string' ? notification.metadata : JSON.stringify(notification.metadata || {})
-            },
-            android: {
-              priority: notification.priority === 'urgent' || notification.priority === 'high' ? 'high' : 'normal',
-              notification: {
-                channelId: notification.type_code === 'meeting' ? 'meetings' :
-                  notification.type_code === 'task_deadline' ? 'tasks' : 'default',
-              }
-            }
-          });
-          console.log(`🚀 Pushed FCM notification to user ${userId}`);
-        } catch (fcmError) {
-          console.error(`⚠️ Error pushing FCM to user ${userId}:`, fcmError.message);
-        }
-      }
-
-    } catch (error) {
-      console.error('❌ Error pushing notification:', error);
-    }
-  }
-
-  /**
-   * Kiểm tra tasks quá hạn
-   */
   async checkOverdueTasks() {
     try {
       const now = new Date();
@@ -264,6 +243,7 @@ class NotificationWatcher {
           await this.pushNotification({
             id: result.insertId,
             user_id: task.user_id,
+            fcm_token: task.fcm_token, // Important
             type_code: 'task_deadline',
             title: '⚠️ Công việc quá hạn',
             message: `"${task.title}" đã quá hạn`,
@@ -275,7 +255,6 @@ class NotificationWatcher {
           });
         }
       }
-
     } catch (error) {
       console.error('❌ Error checking overdue tasks:', error);
     }

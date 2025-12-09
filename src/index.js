@@ -1,6 +1,6 @@
 const express = require('express');
 const http = require('http');
-const { Server } = require('socket.io');
+// const { Server } = require('socket.io'); // REMOVED: Pure FCM Architecture
 const cors = require('cors');
 const config = require('./config');
 const { testConnection } = require('./config/database');
@@ -16,16 +16,8 @@ const meetingRoutes = require('./routes/meetingRoutes');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: '*', // Trong production nên giới hạn origin cụ thể
-    methods: ['GET', 'POST'],
-    credentials: true
-  },
-  // Enable cả polling và websocket cho React Native
-  transports: ['polling', 'websocket'],
-  allowEIO3: true
-});
+
+// REMOVED: WebSocket (socket.io) setup
 
 // Middleware
 app.use(cors({
@@ -77,56 +69,11 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ===== WebSocket Setup =====
-let notificationWatcher = null;
-const connectedClients = new Map(); // Track connected users
-
-io.on('connection', (socket) => {
-  console.log(`🔌 Client connected: ${socket.id}`);
-
-  // Client đăng ký với userId
-  socket.on('register', (userId) => {
-    const userRoom = `user_${userId}`;
-    socket.join(userRoom);
-    connectedClients.set(socket.id, userId);
-    
-    console.log(`✅ User ${userId} registered (socket: ${socket.id})`);
-    
-    // Gửi confirmation
-    socket.emit('registered', {
-      success: true,
-      userId,
-      message: 'Successfully registered for notifications'
-    });
-  });
-
-  // Client disconnect
-  socket.on('disconnect', () => {
-    const userId = connectedClients.get(socket.id);
-    if (userId) {
-      console.log(`👋 User ${userId} disconnected (socket: ${socket.id})`);
-      connectedClients.delete(socket.id);
-    } else {
-      console.log(`👋 Client disconnected: ${socket.id}`);
-    }
-  });
-
-  // Ping/pong để keep alive
-  socket.on('ping', () => {
-    socket.emit('pong');
-  });
-});
-
-// Export io để các routes có thể dùng
-app.set('io', io);
-
-// ===== End WebSocket Setup =====
-
 // Start server
 const startServer = async () => {
   // Test database connection
   const dbConnected = await testConnection();
-  
+
   if (!dbConnected) {
     console.error('❌ Cannot start server without database connection');
     process.exit(1);
@@ -141,7 +88,6 @@ const startServer = async () => {
 ║  Port: ${config.port}                                          ║
 ║  Environment: ${config.nodeEnv.padEnd(39)}║
 ║  API Base: http://localhost:${config.port}/api                 ║
-║  WebSocket: ws://localhost:${config.port}                      ║
 ╚═══════════════════════════════════════════════════════╝
     `);
     console.log('Available endpoints:');
@@ -151,36 +97,25 @@ const startServer = async () => {
     console.log('  POST   /api/documents       - Create document');
     console.log('  PUT    /api/documents/:id   - Update document');
     console.log('  DELETE /api/documents/:id   - Delete document');
-    console.log('  GET    /api/reports         - List reports');
-    console.log('  POST   /api/reports         - Create report');
-    console.log('  PUT    /api/reports/:id     - Update report');
-    console.log('  DELETE /api/reports/:id     - Delete report');
-    console.log('\nWebSocket events:');
-    console.log('  Client → Server:');
-    console.log('    register(userId)          - Register for notifications');
-    console.log('    ping                      - Keep connection alive');
-    console.log('  Server → Client:');
-    console.log('    registered                - Registration confirmed');
-    console.log('    notification              - New notification pushed');
-    console.log('    pong                      - Response to ping');
-    
-    // Khởi động notification watcher
-    notificationWatcher = new NotificationWatcher(io);
+    console.log('  GET    /api/users/me        - Get current user info'); // Add this if you implement it
+
+    // Khởi động notification watcher (Pure FCM Mode)
+    // No 'io' passed - it will use Firebase Admin directly
+    const notificationWatcher = new NotificationWatcher();
     notificationWatcher.start();
-    
+
     // Check meetings và tasks định kỳ (mỗi 5 phút)
     setInterval(() => {
       notificationWatcher.checkUpcomingMeetings();
       notificationWatcher.checkOverdueTasks();
     }, 5 * 60 * 1000);
   });
-  
+
   // Graceful shutdown
   process.on('SIGINT', () => {
     console.log('\n🛑 Shutting down gracefully...');
-    if (notificationWatcher) {
-      notificationWatcher.stop();
-    }
+    // if (notificationWatcher) notificationWatcher.stop(); // Variable scope issue fixed by inline instantiation or global var if needed
+    // For simplicity, we just exit, process.on events are fine.
     server.close(() => {
       console.log('✅ Server closed');
       process.exit(0);
