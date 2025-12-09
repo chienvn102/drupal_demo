@@ -125,7 +125,8 @@ class NotificationWatcher {
         android: {
           priority: 'high',
           notification: {
-            channelId: 'default'
+            channelId: 'alarm_channel',
+            sound: 'alarm_sound'
           }
         }
       };
