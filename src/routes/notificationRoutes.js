@@ -129,25 +129,20 @@ router.post('/', async (req, res) => {
       const fcmToken = users[0]?.fcm_token;
 
       if (fcmToken && fcmToken.length > 50) { // Token thật > 50 ký tự
+        // Data-only FCM để onMessage trigger cả foreground và background
         const instantMessage = {
           token: fcmToken,
-          notification: {
-            title: `📢 ${title}`,
-            body: message,
-          },
           data: {
             type: 'INSTANT',
             type_id: type_id.toString(),
             notification_id: notification.id.toString(),
+            title: title,
+            message: message,
             scheduled_time: scheduled_time,
             metadata: metadata ? JSON.stringify(metadata) : '{}'
           },
           android: {
             priority: 'high',
-            notification: {
-              channelId: 'alarm_channel',
-              sound: 'alarm_sound'
-            }
           }
         };
 
