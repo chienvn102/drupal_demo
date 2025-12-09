@@ -18,7 +18,7 @@ class NotificationWatcher {
    */
   start() {
     console.log('🔄 Starting notification watcher...');
-    
+
     // Check ngay lập tức
     this.checkNotifications();
 
@@ -47,7 +47,7 @@ class NotificationWatcher {
   async checkNotifications() {
     try {
       const now = new Date();
-      
+
       // Lấy notifications chưa gửi (scheduled_time <= now và is_sent = 0)
       // Không phụ thuộc vào created_at, vì notification có thể được tạo trước
       const [notifications] = await pool.query(`
@@ -107,7 +107,7 @@ class NotificationWatcher {
           AND m.status = 'scheduled'
           AND NOT EXISTS (
             SELECT 1 FROM notifications n
-            WHERE n.metadata->>'$.meeting_id' = CAST(m.id AS CHAR)
+            WHERE JSON_UNQUOTE(JSON_EXTRACT(n.metadata, '$.meeting_id')) = CAST(m.id AS CHAR)
               AND n.type_id = 1
               AND n.created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)
           )
@@ -203,7 +203,7 @@ class NotificationWatcher {
           AND t.status NOT IN ('completed', 'cancelled')
           AND NOT EXISTS (
             SELECT 1 FROM notifications n
-            WHERE n.metadata->>'$.task_id' = CAST(t.id AS CHAR)
+            WHERE JSON_UNQUOTE(JSON_EXTRACT(n.metadata, '$.task_id')) = CAST(t.id AS CHAR)
               AND n.type_id = 2
               AND DATE(n.created_at) = CURDATE()
           )

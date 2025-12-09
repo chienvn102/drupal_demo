@@ -23,7 +23,7 @@ mysql -u root -p < database/schema.sql
 
 2. Cập nhật file `.env`:
 ```
-PORT=4000
+PORT=4001
 DB_HOST=localhost
 DB_PORT=3306
 DB_USER=root
@@ -41,7 +41,7 @@ npm run dev
 npm start
 ```
 
-Server sẽ chạy tại: `http://localhost:4000`
+Server sẽ chạy tại: `http://localhost:4001`
 
 ## API Endpoints
 
@@ -96,7 +96,7 @@ Server sẽ chạy tại: `http://localhost:4000`
 
 ### Tạo Document mới
 ```bash
-curl -X POST http://localhost:4000/api/documents \
+curl -X POST http://localhost:4001/api/documents \
   -H "Content-Type: application/json" \
   -d '{
     "title": "Văn bản test",
@@ -110,7 +110,7 @@ curl -X POST http://localhost:4000/api/documents \
 
 ### Tạo Report mới
 ```bash
-curl -X POST http://localhost:4000/api/reports \
+curl -X POST http://localhost:4001/api/reports \
   -H "Content-Type: application/json" \
   -d '{
     "title": "Báo cáo test",
@@ -124,12 +124,12 @@ curl -X POST http://localhost:4000/api/reports \
 
 ### Tìm kiếm Document
 ```bash
-curl "http://localhost:4000/api/documents?search=thong%20tu&document_type=van_ban&limit=10"
+curl "http://localhost:4001/api/documents?search=thong%20tu&document_type=van_ban&limit=10"
 ```
 
 ### Cập nhật Report theo UUID
 ```bash
-curl -X PATCH http://localhost:4000/api/reports/uuid-here \
+curl -X PATCH http://localhost:4001/api/reports/uuid-here \
   -H "Content-Type: application/json" \
   -d '{
     "status": "hoan_thanh",
