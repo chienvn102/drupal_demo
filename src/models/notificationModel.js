@@ -3,7 +3,7 @@ const { pool } = require('../config/database');
 // Get all notifications for a user
 const getNotificationsByUserId = async (userId, filters = {}) => {
   const { is_read, priority, limit = 50, offset = 0 } = filters;
-  
+
   let query = `
     SELECT 
       n.id,
@@ -43,11 +43,11 @@ const getNotificationsByUserId = async (userId, filters = {}) => {
   params.push(parseInt(limit), parseInt(offset));
 
   const [rows] = await pool.query(query, params);
-  
+
   // Get total count
   let countQuery = `SELECT COUNT(*) as total FROM notifications n WHERE n.user_id = ?`;
   const countParams = [userId];
-  
+
   if (is_read !== undefined) {
     countQuery += ' AND n.is_read = ?';
     countParams.push(is_read === 'true' || is_read === true ? 1 : 0);
@@ -98,12 +98,12 @@ const getNotificationById = async (id) => {
 
 // Create notification
 const createNotification = async (data) => {
-  const { 
-    user_id, 
-    type_id, 
-    title, 
-    message, 
-    scheduled_time, 
+  const {
+    user_id,
+    type_id,
+    title,
+    message,
+    scheduled_time,
     priority = 'medium',
     action_url,
     metadata
@@ -123,7 +123,7 @@ const createNotification = async (data) => {
   `;
 
   const metadataJson = metadata ? JSON.stringify(metadata) : null;
-  
+
   const [result] = await pool.query(query, [
     user_id,
     type_id,
@@ -226,6 +226,13 @@ const getNotificationTypes = async () => {
   return rows;
 };
 
+// Update FCM Token for user
+const updateFcmToken = async (userId, token) => {
+  const query = 'UPDATE users SET fcm_token = ? WHERE id = ?';
+  const [result] = await pool.query(query, [token, userId]);
+  return result.affectedRows > 0;
+};
+
 module.exports = {
   getNotificationsByUserId,
   getNotificationById,
@@ -236,5 +243,6 @@ module.exports = {
   getPendingNotifications,
   markAsSent,
   getUnreadCount,
-  getNotificationTypes
+  getNotificationTypes,
+  updateFcmToken
 };
