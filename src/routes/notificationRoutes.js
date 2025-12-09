@@ -137,6 +137,7 @@ router.post('/', async (req, res) => {
           },
           data: {
             type: 'INSTANT',
+            type_id: type_id.toString(),
             notification_id: notification.id.toString(),
             scheduled_time: scheduled_time,
             metadata: metadata ? JSON.stringify(metadata) : '{}'
