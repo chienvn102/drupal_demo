@@ -119,6 +119,24 @@ router.post('/', async (req, res) => {
       metadata
     });
 
+    // 🔥 PUSH REAL-TIME QUA WEBSOCKET
+    const io = req.app.get('io');
+    if (io) {
+      const userRoom = `user_${user_id}`;
+      io.to(userRoom).emit('notification', {
+        id: notification.id,
+        type_id,
+        title,
+        message,
+        priority: priority || 'medium',
+        scheduled_time,
+        action_url,
+        metadata,
+        created_at: new Date().toISOString()
+      });
+      console.log(`🚀 Pushed notification to user ${user_id} via WebSocket`);
+    }
+
     res.status(201).json({
       success: true,
       data: notification,
