@@ -152,6 +152,13 @@ router.post('/', async (req, res) => {
 
         await admin.messaging().send(instantMessage);
         console.log(`🚀 Sent INSTANT FCM to user ${user_id} (scheduled: ${scheduled_time})`);
+
+        // Nếu scheduled_time đã qua hoặc là hiện tại, đánh dấu là đã gửi để Watcher không gửi lại
+        const scheduledDate = new Date(scheduled_time);
+        if (scheduledDate <= new Date()) {
+          await notificationModel.markAsSent(notification.id);
+          console.log(`✅ Marked notification ${notification.id} as sent (instant)`);
+        }
       }
     } catch (fcmError) {
       console.error('FCM Instant Push Error:', fcmError.message);
