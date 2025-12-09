@@ -3,7 +3,7 @@
  * Theo dõi database và push notification real-time qua WebSocket
  */
 
-const pool = require('../config/database');
+const { pool } = require('../config/database');
 
 class NotificationWatcher {
   constructor(io) {
@@ -48,7 +48,8 @@ class NotificationWatcher {
     try {
       const now = new Date();
       
-      // Lấy notifications mới (created sau lastCheckTime)
+      // Lấy notifications chưa gửi (scheduled_time <= now và is_sent = 0)
+      // Không phụ thuộc vào created_at, vì notification có thể được tạo trước
       const [notifications] = await pool.query(`
         SELECT 
           n.*,
@@ -58,26 +59,23 @@ class NotificationWatcher {
         FROM notifications n
         JOIN notification_types nt ON n.type_id = nt.id
         JOIN users u ON n.user_id = u.id
-        WHERE n.created_at > ?
-          AND n.scheduled_time <= ?
+        WHERE n.scheduled_time <= ?
           AND n.is_sent = 0
-        ORDER BY n.priority DESC, n.scheduled_time ASC
-      `, [this.lastCheckTime, now]);
+        ORDER BY FIELD(n.priority, 'urgent', 'high', 'medium', 'low') , n.scheduled_time ASC
+      `, [now]);
 
       if (notifications.length > 0) {
         console.log(`📬 Found ${notifications.length} new notifications`);
 
         // Push notification cho từng user
         for (const notif of notifications) {
+          // Đánh dấu đã gửi (set is_sent = 1 nếu chưa có ai set) - tránh duplicate
+          const [updateResult] = await pool.query(`UPDATE notifications SET is_sent = 1, sent_at = NOW() WHERE id = ? AND is_sent = 0`, [notif.id]);
+          if (!updateResult || updateResult.affectedRows === 0) {
+            console.log(`⚠️ Notification ${notif.id} already sent by another worker, skipping push`);
+            continue; // Skip push if another worker already handled it
+          }
           await this.pushNotification(notif);
-
-          // Đánh dấu đã gửi
-          await pool.query(
-            `UPDATE notifications 
-             SET is_sent = 1, sent_at = NOW() 
-             WHERE id = ?`,
-            [notif.id]
-          );
         }
       }
 
@@ -170,10 +168,12 @@ class NotificationWatcher {
       this.io.to(room).emit('notification', {
         id: notification.id,
         type: notification.type_code || 'system',
+        type_id: notification.type_id || null,
         title: notification.title,
         message: notification.message,
         priority: notification.priority,
-        metadata: notification.metadata,
+        action_url: notification.action_url || null,
+        metadata: typeof notification.metadata === 'string' ? notification.metadata : JSON.stringify(notification.metadata || {}),
         scheduled_time: notification.scheduled_time,
         created_at: notification.created_at,
       });
