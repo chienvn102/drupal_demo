@@ -86,70 +86,7 @@ class NotificationWatcher {
   /**
    * Push notification qua FCM
    */
-  async pushNotification(notification) {
-    try {
-      const userId = notification.user_id.toString();
-      const fcmToken = notification.fcm_token;
-
-      if (!fcmToken) {
-        console.log(`ℹ️ User ${userId} has no FCM token, skipping push`);
-        return;
-      }
-
-      // Metadata handling
-      let metadataStr = '{}';
-      if (typeof notification.metadata === 'string') {
-        metadataStr = notification.metadata;
-      } else if (notification.metadata) {
-        metadataStr = JSON.stringify(notification.metadata);
-      }
-
-      // Logic phân loại:
-      // - Meeting/Task: Gửi SYNC (để Frontend tự schedule Alarm)
-      // - System/Khác: Gửi Notification hiển thị ngay
-
-      const isSyncType = notification.type_code === 'meeting' || notification.type_code === 'task_deadline';
-
-      // Base payload (Data Only)
-      const messagePayload = {
-        token: fcmToken,
-        data: {
-          type: isSyncType ? 'SYNC' : (notification.type_code || 'system'),
-          entity_type: notification.type_code || 'system',
-          entity_id: notification.id ? notification.id.toString() : '',
-          metadata: metadataStr
-        },
-        android: {
-          priority: 'high',
-        }
-      };
-
-      // Nếu KHÔNG PHẢI Sync Type -> Kèm thêm notification payload để hiện luôn
-      if (!isSyncType) {
-        messagePayload.notification = {
-          title: notification.title,
-          body: notification.message,
-        };
-        // Thêm channel mặc định
-        messagePayload.android.notification = {
-          channelId: 'default'
-        };
-      }
-
-      await admin.messaging().send(messagePayload);
-      console.log(`🚀 Sent ${isSyncType ? 'SYNC' : 'ALERT'} to user ${userId}`);
-
-    } catch (error) {
-      console.error(`❌ Error pushing FCM to user ${notification.user_id}:`, error.message);
-    }
-  }
-
-  // ... (Giữ nguyên logic checkUpcomingMeetings và checkOverdueTasks vì nó chỉ INSERT vào DB)
-  // Nhưng cần đảm bảo chúng gọi `this.pushNotification` thay vì emit socket
-
   async checkUpcomingMeetings() {
-    // ... Same legacy logic for identifying meetings ...
-    // Simplified for brevity - assumes logic is same just calls this.pushNotification
     try {
       const now = new Date();
       const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
@@ -195,7 +132,7 @@ class NotificationWatcher {
           await this.pushNotification({
             id: result.insertId,
             user_id: meeting.user_id,
-            fcm_token: meeting.fcm_token, // Important: Pass token from query
+            fcm_token: meeting.fcm_token,
             type_code: 'meeting',
             title: '🕐 Cuộc họp sắp diễn ra',
             message: `"${meeting.title}" sẽ bắt đầu trong vòng 1 giờ tới`,
