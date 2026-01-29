@@ -5,6 +5,7 @@ const cors = require('cors');
 const config = require('./config');
 const { testConnection } = require('./config/database');
 const NotificationWatcher = require('./services/notificationWatcher');
+const DrupalWatcher = require('./services/drupalWatcher');
 
 // Import routes
 const categoryRoutes = require('./routes/categoryRoutes');
@@ -13,6 +14,7 @@ const reportRoutes = require('./routes/reportRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const taskRoutes = require('./routes/taskRoutes');
 const meetingRoutes = require('./routes/meetingRoutes');
+const drupalRoutes = require('./routes/drupalRoutes');
 
 const app = express();
 const server = http.createServer(app);
@@ -50,6 +52,7 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/meetings', meetingRoutes);
+app.use('/api/drupal', drupalRoutes);
 
 // 404 handler
 app.use((req, res) => {
@@ -103,6 +106,11 @@ const startServer = async () => {
     // No 'io' passed - it will use Firebase Admin directly
     const notificationWatcher = new NotificationWatcher();
     notificationWatcher.start();
+
+    // Khởi động Drupal API watcher
+    const drupalWatcher = new DrupalWatcher();
+    drupalRoutes.setWatcher(drupalWatcher);
+    drupalWatcher.start();
 
     // Check meetings và tasks định kỳ (mỗi 5 phút)
     setInterval(() => {
