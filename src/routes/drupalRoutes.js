@@ -18,7 +18,7 @@ router.setWatcher = (watcher) => {
  * POST /api/drupal/register-token
  * Register FCM token for push notifications
  */
-router.post('/register-token', (req, res) => {
+router.post('/register-token', async (req, res) => {
     const { token } = req.body;
 
     if (!token) {
@@ -35,11 +35,19 @@ router.post('/register-token', (req, res) => {
         });
     }
 
-    const registered = drupalWatcher.registerToken(token);
+    const result = drupalWatcher.registerToken(token);
+
+    // If this is a new token, send all existing tasks
+    let tasksSent = 0;
+    if (result.isNew) {
+        tasksSent = await drupalWatcher.sendAllTasksToToken(token);
+    }
 
     res.json({
-        success: registered,
-        message: registered ? 'Token registered successfully' : 'Failed to register token',
+        success: result.success,
+        message: result.success ? 'Token registered successfully' : 'Failed to register token',
+        isNew: result.isNew,
+        tasksSent: tasksSent,
         tokenCount: drupalWatcher.getTokenCount()
     });
 });

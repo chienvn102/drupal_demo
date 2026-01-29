@@ -48,14 +48,99 @@ class DrupalWatcher {
 
     /**
      * Register FCM token for push notifications
+     * Returns { isNew: boolean, success: boolean }
      */
     registerToken(token) {
         if (token && typeof token === 'string') {
+            const isNew = !this.fcmTokens.has(token);
             this.fcmTokens.add(token);
             console.log(`📱 Registered FCM token: ${token.substring(0, 20)}...`);
-            return true;
+            return { success: true, isNew };
         }
-        return false;
+        return { success: false, isNew: false };
+    }
+
+    /**
+     * Send all known tasks to a specific token (for new registrations)
+     */
+    async sendAllTasksToToken(token) {
+        if (this.knownTaskIds.size === 0) {
+            console.log('[DrupalWatcher] No known tasks to send');
+            return 0;
+        }
+
+        // Fetch latest tasks from API
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT);
+
+            const response = await fetch(DRUPAL_API_URL, {
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                throw new Error(`API returned ${response.status}`);
+            }
+
+            const data = await response.json();
+            const tasks = this.parseApiResponse(data);
+
+            console.log(`[DrupalWatcher] Sending ${tasks.length} tasks to new token`);
+
+            let sentCount = 0;
+            for (const task of tasks) {
+                try {
+                    await this.sendSingleFcm(token, task);
+                    sentCount++;
+                } catch (error) {
+                    console.error(`[DrupalWatcher] Error sending task ${task.id}:`, error.message);
+                }
+            }
+
+            console.log(`[DrupalWatcher] ✅ Sent ${sentCount} tasks to new token`);
+            return sentCount;
+        } catch (error) {
+            console.error('[DrupalWatcher] Error fetching tasks for new token:', error.message);
+            return 0;
+        }
+    }
+
+    /**
+     * Send FCM to a single token
+     */
+    async sendSingleFcm(token, task) {
+        const deadlineStr = task.deadline.toLocaleString('vi-VN', {
+            hour: '2-digit',
+            minute: '2-digit',
+            day: '2-digit',
+            month: '2-digit'
+        });
+
+        const message = {
+            token: token,
+            notification: {
+                title: '📋 Nhắc việc',
+                body: `${task.title}\nHạn: ${deadlineStr}`
+            },
+            data: {
+                type: 'drupal_task',
+                task_id: task.id,
+                title: task.title,
+                node_url: task.nodeUrl,
+                deadline: task.deadline.toISOString(),
+                reminder_time: task.reminderTime.toISOString()
+            },
+            android: {
+                priority: 'high',
+                notification: {
+                    channelId: 'immediate-notifications',
+                    sound: 'noti_sound'
+                }
+            }
+        };
+
+        await admin.messaging().send(message);
     }
 
     /**
